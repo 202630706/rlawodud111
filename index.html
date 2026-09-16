@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>러닝 피하기 게임</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a1a1a;
+            font-family: 'Arial', sans-serif;
+            color: white;
+            flex-direction: column;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            background: linear-gradient(to bottom, #2c3e50, #3498db);
+            border-bottom: 4px solid #27ae60;
+            display: block;
+        }
+
+        .score-board {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-align: right;
+        }
+
+        .new-record-text {
+            color: #f1c40f;
+            animation: glow 0.5s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 5px #fff, 0 0 10px #f1c40f; }
+            to { text-shadow: 0 0 20px #fff, 0 0 30px #e67e22; }
+        }
+
+        /* 최고 점수 달성 시 특수 팝업 */
+        #effect-overlay {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            font-weight: 900;
+            color: #f1c40f;
+            text-shadow: 0 0 10px #000, 0 0 20px #f39c12;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        #effect-overlay.show {
+            opacity: 1;
+            transform: translate(-50%, -60%) scale(1.2);
+        }
+
+        .controls-info {
+            margin-top: 15px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        kbd {
+            background-color: #333;
+            border: 1px solid #555;
+            border-radius: 3px;
+            padding: 2px 6px;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div class="score-board">
+            <div>HIGH: <span id="high-score">0</span></div>
+            <div>SCORE: <span id="current-score">0</span></div>
+        </div>
+        <div id="effect-overlay">🎉 NEW RECORD! 🎉</div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+    </div>
+
+    <div class="controls-info">
+        조작법: <kbd>Space</kbd> 점프 | <kbd>Shift</kbd> 숙이기 (누르고 있기) | 게임 오버 시 <kbd>Space</kbd> 재시작
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const scoreEl = document.getElementById('current-score');
+        const highScoreEl = document.getElementById('high-score');
+        const effectOverlay = document.getElementById('effect-overlay');
+
+        // 게임 상태 변수
+        let score = 0;
+        let highScore = localStorage.getItem('runner_high_score') || 0;
+        highScoreEl.textContent = highScore;
+
+        let isGameOver = false;
+        let isNewRecord = false;
+        let scoreInterval;
+        let gameLoopId;
+        let frameCount = 0;
+
+        // 플레이어 설정
+        const player = {
+            x: 80,
+            y: 300,
+            normalWidth: 40,
+            normalHeight: 60,
+            duckHeight: 30,
+            width: 40,
+            height: 60,
+            color: '#e74c3c',
+            dy: 0,
+            gravity: 0.6,
+            jumpPower: -12,
+            isGrounded: false,
+            isDucking: false
+        };
+
+        // 바닥 높이
+        const groundY = 360;
+
+        // 장애물 배열
+        let obstacles = [];
+
+        // 키 입력을 위한 상태 저장
+        const keys = {};
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                keys[e.code] = true;
+            }
+
+            // 게임 오버 상태에서 스페이스바 누르면 재시작
+            if (isGameOver && e.code === 'Space') {
+                resetGame();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                keys[e.code] = false;
+            }
+        });
+
+        // 게임 시작/초기화
+        function resetGame() {
+            score = 0;
+            scoreEl.textContent = score;
+            scoreEl.classList.remove('new-record-text');
+            effectOverlay.classList.remove('show');
+            
+            isGameOver = false;
+            isNewRecord = false;
+            obstacles = [];
+            frameCount = 0;
+
+            player.y = groundY - player.normalHeight;
+            player.dy = 0;
+            player.height = player.normalHeight;
+            player.isDucking = false;
+
+            // 0.1초(100ms)마다 1점 추가
+            clearInterval(scoreInterval);
+            scoreInterval = setInterval(() => {
+                if (!isGameOver) {
+                    score++;
+                    scoreEl.textContent = score;
+                    checkHighScore();
+                }
+            }, 100);
+
+            cancelAnimationFrame(gameLoopId);
+            update();
+        }
+
+        // 최고 점수 체크 및 특수효과
+        function checkHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                highScoreEl.textContent = highScore;
+                localStorage.setItem('runner_high_score', highScore);
+
+                // 최고 점수 처음 갱신 시 효과 발동
+                if (!isNewRecord && highScore > 0) {
+                    isNewRecord = true;
+                    scoreEl.classList.add('new-record-text');
+                    
+                    // 특수효과 텍스트 표시
+                    effectOverlay.classList.add('show');
+                    setTimeout(() => {
+                        effectOverlay.classList.remove('show');
+                    }, 2000);
+                }
+            }
+        }
+
+        // 장애물 생성 함수
+        function spawnObstacle() {
+            // 랜덤으로 장애물 타입 설정 (0: 바닥 장애물-점프용, 1: 공중 장애물-숙이기용)
+            const type = Math.random() < 0.5 ? 'ground' : 'air';
+
+            if (type === 'ground') {
+                obstacles.push({
+                    x: canvas.width,
+                    y: groundY - 40,
+                    width: 30,
+                    height: 40,
+                    color: '#e67e22'
+                });
+            } else {
+                obstacles.push({
+                    x: canvas.width,
+                    y: groundY - 75, // 점프 시 부딪히고 숙여야 피해지는 높이
+                    width: 40,
+                    height: 35,
+                    color: '#9b59b6'
+                });
+            }
+        }
+
+        // 업데이트 루프
+        function update() {
+            if (isGameOver) return;
+
+            frameCount++;
+
+            // --- 1. 플레이어 상태 업데이트 ---
+            // 숙이기 (Shift)
+            if ((keys['ShiftLeft'] || keys['ShiftRight']) && player.isGrounded) {
+                player.isDucking = true;
+                player.height = player.duckHeight;
+                player.y = groundY - player.duckHeight;
+            } else {
+                if (player.isDucking) {
+                    player.y -= (player.normalHeight - player.duckHeight);
+                }
+                player.isDucking = false;
+                player.height = player.normalHeight;
+            }
+
+            // 점프 (Space) - 숙이기 중엔 점프 불가
+            if (keys['Space'] && player.isGrounded && !player.isDucking) {
+                player.dy = player.jumpPower;
+                player.isGrounded = false;
+            }
+
+            // 중력 적용
+            player.dy += player.gravity;
+            player.y += player.dy;
+
+            // 바닥 착지 판정
+            const currentHeight = player.isDucking ? player.duckHeight : player.normalHeight;
+            if (player.y + currentHeight >= groundY) {
+                player.y = groundY - currentHeight;
+                player.dy = 0;
+                player.isGrounded = true;
+            }
+
+            // --- 2. 장애물 생성 및 이동 ---
+            // 일정 프레임마다 장애물 생성 (점수가 높아질수록 조금씩 빨리 생성)
+            const spawnRate = Math.max(60, 120 - Math.floor(score / 50));
+            if (frameCount % spawnRate === 0) {
+                spawnObstacle();
+            }
+
+            // 장애물 이동 및 충돌 체크
+            const speed = 6 + Math.floor(score / 100); // 점수에 따른 속도 증가
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.x -= speed;
+
+                // 화면 밖으로 나간 장애물 제거
+                if (obs.x + obs.width < 0) {
+                    obstacles.splice(i, 1);
+                    continue;
+                }
+
+                // 충돌 검사 (AABB)
+                if (
+                    player.x < obs.x + obs.width &&
+                    player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.height &&
+                    player.y + player.height > obs.y
+                ) {
+                    gameOver();
+                }
+            }
+
+            // --- 3. 화면 그리기 ---
+            draw();
+
+            gameLoopId = requestAnimationFrame(update);
+        }
+
+        // 화면 그리기 함수
+        function draw() {
+            // 배경 청소
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 바닥 그리기
+            ctx.fillStyle = '#27ae60';
+            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+
+            // 특수효과: 최고점수 갱신 중일 때 배경 반짝임 효과
+            if (isNewRecord) {
+                ctx.fillStyle = 'rgba(241, 196, 15, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            // 플레이어 그리기
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // 플레이어 눈표시 (보는 방향)
+            ctx.fillStyle = 'white';
+            const eyeY = player.isDucking ? player.y + 5 : player.y + 10;
+            ctx.fillRect(player.x + 25, eyeY, 8, 8);
+
+            // 장애물 그리기
+            for (const obs of obstacles) {
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            }
+        }
+
+        // 게임 오버
+        function gameOver() {
+            isGameOver = true;
+            clearInterval(scoreInterval);
+
+            // 게임 오버 텍스트 출력
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#e74c3c';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '20px Arial';
+            ctx.fillText('스페이스바(Space)를 눌러 다시 시작', canvas.width / 2, canvas.height / 2 + 30);
+        }
+
+        // 게임 시작
+        resetGame();
+    </script>
+</body>
+</html>
