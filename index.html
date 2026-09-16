@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>러닝 피하기 게임</title>
+    <title>크롬 공룡 피하기 게임</title>
     <style>
         * {
             box-sizing: border-box;
@@ -30,8 +30,8 @@
         }
 
         canvas {
-            background: linear-gradient(to bottom, #2c3e50, #3498db);
-            border-bottom: 4px solid #27ae60;
+            background: linear-gradient(to bottom, #1e272e, #485460);
+            border-bottom: 4px solid #d2dae2;
             display: block;
         }
 
@@ -55,7 +55,6 @@
             to { text-shadow: 0 0 20px #fff, 0 0 30px #e67e22; }
         }
 
-        /* 최고 점수 달성 시 특수 팝업 */
         #effect-overlay {
             position: absolute;
             top: 30%;
@@ -103,7 +102,7 @@
     </div>
 
     <div class="controls-info">
-        조작법: <kbd>Space</kbd> 점프 (주황색 장애물) | <kbd>Shift</kbd> 숙이기 (보라색 장애물) | 게임 오버 시 <kbd>Space</kbd> 재시작
+        조작법: <kbd>Space</kbd> 점프 (연속 2회 눌러 2단점프) | <kbd>Shift</kbd> 숙이기 | 게임 오버 시 <kbd>Space</kbd> 재시작
     </div>
 
     <script>
@@ -115,7 +114,6 @@
         const speedEl = document.getElementById('speed-display');
         const effectOverlay = document.getElementById('effect-overlay');
 
-        // 게임 상태 변수
         let score = 0;
         let highScore = localStorage.getItem('runner_high_score') || 0;
         highScoreEl.textContent = highScore;
@@ -126,38 +124,40 @@
         let gameLoopId;
         let frameCount = 0;
 
-        // 바닥 높이
         const groundY = 360;
 
-        // 플레이어 설정
+        // 티라노사우루스 캐릭터 설정
         const player = {
             x: 80,
             y: 300,
-            normalWidth: 40,
+            normalWidth: 44,
             normalHeight: 60,
-            duckHeight: 25,
-            width: 40,
+            duckWidth: 60,
+            duckHeight: 30,
+            width: 44,
             height: 60,
-            color: '#e74c3c',
+            color: '#2ed573',
             dy: 0,
-            gravity: 0.6,
-            jumpPower: -12,
-            isGrounded: false,
+            gravity: 0.65,
+            jumpPower: -11.5,
+            jumpCount: 0,       // 현재 점프 횟수 (최대 2회)
+            maxJumps: 2,
             isDucking: false
         };
 
-        // 장애물 배열
         let obstacles = [];
-
-        // 키 입력을 위한 상태 저장
         const keys = {};
 
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                if (!keys[e.code]) { // 누르는 순간 처리 (점프 입력 중복 방지)
+                    if (e.code === 'Space' && !isGameOver) {
+                        handleJump();
+                    }
+                }
                 keys[e.code] = true;
             }
 
-            // 게임 오버 상태에서 스페이스바 누르면 재시작
             if (isGameOver && e.code === 'Space') {
                 resetGame();
             }
@@ -169,7 +169,16 @@
             }
         });
 
-        // 게임 시작/초기화
+        // 점프 로직 (2단 점프 포함)
+        function handleJump() {
+            if (player.isDucking) return; // 숙인 상태에선 점프 불가
+
+            if (player.jumpCount < player.maxJumps) {
+                player.dy = player.jumpPower;
+                player.jumpCount++;
+            }
+        }
+
         function resetGame() {
             score = 0;
             scoreEl.textContent = score;
@@ -183,10 +192,11 @@
 
             player.y = groundY - player.normalHeight;
             player.dy = 0;
+            player.width = player.normalWidth;
             player.height = player.normalHeight;
+            player.jumpCount = 0;
             player.isDucking = false;
 
-            // 0.1초(100ms)마다 1점 추가
             clearInterval(scoreInterval);
             scoreInterval = setInterval(() => {
                 if (!isGameOver) {
@@ -200,19 +210,15 @@
             update();
         }
 
-        // 최고 점수 체크 및 특수효과
         function checkHighScore() {
             if (score > highScore) {
                 highScore = score;
                 highScoreEl.textContent = highScore;
                 localStorage.setItem('runner_high_score', highScore);
 
-                // 최고 점수 처음 갱신 시 효과 발동
                 if (!isNewRecord && highScore > 0) {
                     isNewRecord = true;
                     scoreEl.classList.add('new-record-text');
-                    
-                    // 특수효과 텍스트 표시
                     effectOverlay.classList.add('show');
                     setTimeout(() => {
                         effectOverlay.classList.remove('show');
@@ -221,49 +227,54 @@
             }
         }
 
-        // 장애물 생성 함수
+        // 장애물 생성 (선인장 최대 3개 / 익룡 무작위 높이)
         function spawnObstacle() {
-            // 랜덤으로 장애물 타입 설정 (0: 바닥 장애물-점프용, 1: 공중 장애물-숙이기 전용)
-            const type = Math.random() < 0.5 ? 'ground' : 'air';
+            const type = Math.random() < 0.55 ? 'cactus' : 'pterodactyl';
 
-            if (type === 'ground') {
-                // 바닥 장애물 (점프해서 피함)
+            if (type === 'cactus') {
+                // 선인장 1~3개 랜덤 연결 생성
+                const cactusCount = Math.floor(Math.random() * 3) + 1;
+                const singleWidth = 18;
+                const height = 45 + Math.floor(Math.random() * 10);
+                
                 obstacles.push({
+                    type: 'cactus',
                     x: canvas.width,
-                    y: groundY - 45,
-                    width: 35,
-                    height: 45,
-                    color: '#e67e22'
+                    y: groundY - height,
+                    width: singleWidth * cactusCount,
+                    height: height,
+                    count: cactusCount,
+                    color: '#26de81'
                 });
             } else {
-                // 공중 장애물 (점프해도 천장까지 높아서 부딪힘, 오직 숙여야만 통과)
-                // 바닥에서부터 25px 떨어진 지점부터 천장(0)까지 채움
-                const airObstacleHeight = groundY - 25; 
+                // 익룡 생성 (2단 점프 높이까지 차단하는 다양한 y 좌표)
+                // y: 170 (최고 점프 지점 도달 높이 -> 숙이기 전용), 220 (중간 높이), 275 (저공 비행)
+                const possibleY = [170, 220, 275];
+                const selectedY = possibleY[Math.floor(Math.random() * possibleY.length)];
+                
                 obstacles.push({
+                    type: 'pterodactyl',
                     x: canvas.width,
-                    y: 0,
-                    width: 55,
-                    height: airObstacleHeight,
-                    color: '#9b59b6'
+                    y: selectedY,
+                    width: 46,
+                    height: 32,
+                    wingState: 0,
+                    color: '#a55eea'
                 });
             }
         }
 
-        // 업데이트 루프
         function update() {
             if (isGameOver) return;
 
             frameCount++;
-
-            // --- 0. 속도 계산 (점수에 따라 점진적으로 계속 증가) ---
-            // 기본 속도 6.0부터 시작해 10점마다 0.15씩 가속
             const currentSpeed = 6.0 + (score * 0.015);
             speedEl.textContent = currentSpeed.toFixed(1);
 
-            // --- 1. 플레이어 상태 업데이트 ---
-            // 숙이기 (Shift)
-            if ((keys['ShiftLeft'] || keys['ShiftRight']) && player.isGrounded) {
+            // --- 1. 플레이어 상태 (숙이기 & 물리) ---
+            if ((keys['ShiftLeft'] || keys['ShiftRight']) && player.jumpCount === 0) {
                 player.isDucking = true;
+                player.width = player.duckWidth;
                 player.height = player.duckHeight;
                 player.y = groundY - player.duckHeight;
             } else {
@@ -271,103 +282,174 @@
                     player.y -= (player.normalHeight - player.duckHeight);
                 }
                 player.isDucking = false;
+                player.width = player.normalWidth;
                 player.height = player.normalHeight;
             }
 
-            // 점프 (Space) - 숙이기 중엔 점프 불가
-            if (keys['Space'] && player.isGrounded && !player.isDucking) {
-                player.dy = player.jumpPower;
-                player.isGrounded = false;
-            }
-
-            // 중력 적용
             player.dy += player.gravity;
             player.y += player.dy;
 
-            // 바닥 착지 판정
-            const currentHeight = player.isDucking ? player.duckHeight : player.normalHeight;
+            // 바닥 착지
+            const currentHeight = player.height;
             if (player.y + currentHeight >= groundY) {
                 player.y = groundY - currentHeight;
                 player.dy = 0;
-                player.isGrounded = true;
+                player.jumpCount = 0; // 점프 횟수 초기화
             }
 
-            // --- 2. 장애물 생성 및 이동 ---
-            // 속도가 빨라짐에 따라 장애물 생성 간격도 자연스럽게 줄어듦
-            const spawnRate = Math.max(45, Math.floor(1100 / currentSpeed));
+            // --- 2. 장애물 관리 ---
+            const spawnRate = Math.max(45, Math.floor(1050 / currentSpeed));
             if (frameCount % spawnRate === 0) {
                 spawnObstacle();
             }
 
-            // 장애물 이동 및 충돌 체크
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 const obs = obstacles[i];
                 obs.x -= currentSpeed;
 
-                // 화면 밖으로 나간 장애물 제거
+                // 익룡 날개 애니메이션
+                if (obs.type === 'pterodactyl' && frameCount % 15 === 0) {
+                    obs.wingState = obs.wingState === 0 ? 1 : 0;
+                }
+
                 if (obs.x + obs.width < 0) {
                     obstacles.splice(i, 1);
                     continue;
                 }
 
-                // 충돌 검사 (AABB)
+                // 충돌 검사 (히트박스 정밀 조정)
+                const padding = 4;
                 if (
-                    player.x < obs.x + obs.width &&
-                    player.x + player.width > obs.x &&
-                    player.y < obs.y + obs.height &&
-                    player.y + player.height > obs.y
+                    player.x + padding < obs.x + obs.width &&
+                    player.x + player.width - padding > obs.x &&
+                    player.y + padding < obs.y + obs.height &&
+                    player.y + player.height - padding > obs.y
                 ) {
                     gameOver();
                 }
             }
 
-            // --- 3. 화면 그리기 ---
             draw();
-
             gameLoopId = requestAnimationFrame(update);
         }
 
-        // 화면 그리기 함수
-        function draw() {
-            // 배경 청소
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // --- 🎨 픽셀 스타일 렌더링 함수들 ---
 
-            // 바닥 그리기
-            ctx.fillStyle = '#27ae60';
-            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
-
-            // 특수효과: 최고점수 갱신 중일 때 배경 반짝임 효과
-            if (isNewRecord) {
-                ctx.fillStyle = 'rgba(241, 196, 15, 0.05)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
-
-            // 플레이어 그리기
+        // 티라노사우루스 그리기
+        function drawTyranno(x, y, isDucking) {
             ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
-
-            // 플레이어 눈표시 (보는 방향)
-            ctx.fillStyle = 'white';
-            const eyeY = player.isDucking ? player.y + 5 : player.y + 10;
-            ctx.fillRect(player.x + 25, eyeY, 8, 8);
-
-            // 장애물 그리기
-            for (const obs of obstacles) {
-                ctx.fillStyle = obs.color;
-                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            if (!isDucking) {
+                // 몸통 & 머리
+                ctx.fillRect(x + 10, y + 15, 24, 30); // 몸
+                ctx.fillRect(x + 20, y, 20, 18);    // 머리
+                ctx.fillRect(x + 32, y + 8, 12, 10);  // 주둥이
+                ctx.fillRect(x, y + 25, 12, 10);     // 꼬리
+                // 다리
+                ctx.fillRect(x + 12, y + 45, 8, 15);
+                ctx.fillRect(x + 26, y + 45, 8, 15);
+                // 눈
+                ctx.fillStyle = '#1e272e';
+                ctx.fillRect(x + 30, y + 4, 4, 4);
+            } else {
+                // 숙인 상태 (길고 낮게)
+                ctx.fillRect(x + 10, y + 8, 38, 18);  // 몸통
+                ctx.fillRect(x + 40, y + 4, 18, 14);  // 머리
+                ctx.fillRect(x, y + 12, 12, 8);      // 꼬리
+                // 짧은 다리
+                ctx.fillRect(x + 18, y + 24, 8, 6);
+                ctx.fillRect(x + 32, y + 24, 8, 6);
+                // 눈
+                ctx.fillStyle = '#1e272e';
+                ctx.fillRect(x + 48, y + 6, 4, 4);
             }
         }
 
-        // 게임 오버
+        // 선인장 그리기 (1~3개)
+        function drawCactus(obs) {
+            ctx.fillStyle = obs.color;
+            const singleW = obs.width / obs.count;
+            
+            for (let i = 0; i < obs.count; i++) {
+                const cx = obs.x + (i * singleW);
+                const cy = obs.y;
+                const cw = singleW - 2;
+                
+                // 줄기
+                ctx.fillRect(cx + 4, cy, cw - 8, obs.height);
+                // 가지
+                ctx.fillRect(cx, cy + 12, cw, 6);
+                ctx.fillRect(cx, cy + 6, 4, 6);
+                ctx.fillRect(cx + cw - 4, cy + 6, 4, 6);
+            }
+        }
+
+        // 익룡 그리기
+        function drawPterodactyl(obs) {
+            ctx.fillStyle = obs.color;
+            const x = obs.x;
+            const y = obs.y;
+
+            // 몸통 및 부리
+            ctx.fillRect(x + 12, y + 12, 22, 10); // 몸
+            ctx.fillRect(x + 30, y + 8, 16, 6);   // 부리
+            ctx.fillRect(x, y + 14, 12, 4);      // 꼬리
+
+            // 날개 애니메이션 (위/아래)
+            if (obs.wingState === 0) {
+                // 날개 위로
+                ctx.beginPath();
+                ctx.moveTo(x + 18, y + 12);
+                ctx.lineTo(x + 10, y);
+                ctx.lineTo(x + 28, y + 12);
+                ctx.fill();
+            } else {
+                // 날개 아래로
+                ctx.beginPath();
+                ctx.moveTo(x + 18, y + 18);
+                ctx.lineTo(x + 10, y + 30);
+                ctx.lineTo(x + 28, y + 18);
+                ctx.fill();
+            }
+
+            // 눈
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + 32, y + 9, 3, 3);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 바닥
+            ctx.fillStyle = '#d2dae2';
+            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+
+            // 최고기록 반짝임 효과
+            if (isNewRecord) {
+                ctx.fillStyle = 'rgba(241, 196, 15, 0.08)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            // 플레이어
+            drawTyranno(player.x, player.y, player.isDucking);
+
+            // 장애물
+            for (const obs of obstacles) {
+                if (obs.type === 'cactus') {
+                    drawCactus(obs);
+                } else if (obs.type === 'pterodactyl') {
+                    drawPterodactyl(obs);
+                }
+            }
+        }
+
         function gameOver() {
             isGameOver = true;
             clearInterval(scoreInterval);
 
-            // 게임 오버 텍스트 출력
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.fillStyle = '#e74c3c';
+            ctx.fillStyle = '#ff4757';
             ctx.font = 'bold 48px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
@@ -377,7 +459,6 @@
             ctx.fillText('스페이스바(Space)를 눌러 다시 시작', canvas.width / 2, canvas.height / 2 + 30);
         }
 
-        // 게임 시작
         resetGame();
     </script>
 </body>
