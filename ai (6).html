@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>오늘숙제 뭐하지? - 스마트 숙제 우선순위 AI</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts (Noto Sans KR) -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            font-family: 'Noto Sans KR', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: #F1F5F9;
+            color: #1E293B;
+            touch-action: manipulation;
+        }
+
+        /* App Container Shadows and Borders */
+        .app-card {
+            background: #FFFFFF;
+            border-radius: 28px;
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+            border: 1px solid #E2E8F0;
+        }
+
+        /* Pill Button Styling */
+        .btn-primary {
+            background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+            box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.35);
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-primary:active {
+            transform: scale(0.98);
+            box-shadow: 0 2px 8px 0 rgba(59, 130, 246, 0.25);
+        }
+
+        /* Soft Option Selector Buttons */
+        .option-card {
+            transition: all 0.2s ease;
+            border: 2px solid #F1F5F9;
+        }
+        .option-card.selected {
+            border-color: #3B82F6;
+            background-color: #EFF6FF;
+            color: #1D4ED8;
+        }
+
+        /* Custom Scrollbar for list items */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Step Fade Animation */
+        .step-transition {
+            animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Timer pulse effect */
+        .timer-pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-0 md:p-6">
+
+    <!-- Mobile Screen Wrapper Frame -->
+    <div class="w-full max-w-md h-screen md:h-[840px] bg-slate-50 flex flex-col justify-between overflow-hidden relative md:rounded-[36px] md:shadow-2xl md:border-[6px] md:border-white">
+
+        <!-- Top Header & Progress Bar (Hidden in Step 0 & Loading Step 5) -->
+        <header id="app-header" class="hidden px-6 pt-5 pb-3 bg-slate-50 border-b border-slate-100 flex-shrink-0 z-10">
+            <div class="flex items-center justify-between mb-3">
+                <button onclick="prevStep()" id="back-btn" class="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-200/50 transition">
+                    <i class="fa-solid fa-chevron-left text-lg"></i>
+                </button>
+                <div class="text-sm font-bold text-slate-400">
+                    <span id="current-step-num" class="text-blue-600">1</span> <span class="text-slate-300">/</span> <span id="total-step-num">5</span>
+                </div>
+                <button onclick="resetApp()" class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-rose-500 rounded-full hover:bg-slate-200/50 transition" title="처음으로">
+                    <i class="fa-solid fa-rotate-right text-sm"></i>
+                </button>
+            </div>
+            
+            <!-- Soft Blue Progress Bar -->
+            <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                <div id="progress-bar" class="bg-blue-500 h-full w-1/5 transition-all duration-300 ease-out rounded-full"></div>
+            </div>
+        </header>
+
+        <!-- Dynamic Main Content Step Area -->
+        <main class="flex-1 overflow-y-auto px-6 py-4 no-scrollbar relative flex flex-col justify-center">
+
+            <!-- STEP 0: Clean Cover Page -->
+            <div id="step-0" class="step-transition flex flex-col items-center justify-between h-full py-8 text-center">
+                <div class="w-full flex justify-center mt-4">
+                    <span class="bg-blue-50 text-blue-600 font-semibold px-4 py-1.5 rounded-full text-xs tracking-wide flex items-center gap-1.5 shadow-sm border border-blue-100">
+                        <i class="fa-solid fa-sparkles text-blue-500"></i> 스마트 숙제 우선순위 AI
+                    </span>
+                </div>
+
+                <!-- Graphic Icon Illustration -->
+                <div class="my-auto py-6 relative">
+                    <div class="w-36 h-36 bg-blue-100/60 rounded-full absolute -top-2 -left-2 filter blur-xl opacity-70"></div>
+                    <div class="relative flex items-center justify-center">
+                        <div class="w-32 h-32 bg-gradient-to-tr from-blue-500 to-indigo-400 rounded-3xl shadow-xl flex items-center justify-center transform -rotate-3 hover:rotate-0 transition duration-300">
+                            <i class="fa-solid fa-book-bookmark text-6xl text-white"></i>
+                        </div>
+                        <div class="absolute -bottom-3 -right-3 w-16 h-16 bg-white rounded-2xl shadow-lg border border-slate-100 flex items-center justify-center text-blue-600 transform rotate-6">
+                            <i class="fa-solid fa-stopwatch text-3xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-8">
+                    <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                        오늘 숙제<br><span class="text-blue-600">뭐부터 하지?</span>
+                    </h1>
+                    <p class="text-slate-400 text-sm mt-3 font-normal leading-relaxed">
+                        학원 시간과 나의 1문제 풀이 속도를 측정해<br>가장 효율적인 숙제 순서를 찾아드려요!
+                    </p>
+                </div>
+
+                <button onclick="nextStep()" class="w-full py-4 bg-blue-600 text-white font-bold text-lg rounded-2xl btn-primary flex items-center justify-center gap-2">
+                    🚀 시작하기
+                </button>
+            </div>
+
+            <!-- STEP 1: Register Academies -->
+            <div id="step-1" class="step-transition hidden flex-col h-full justify-between py-2">
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl">🏫</span>
+                        <h2 class="text-2xl font-bold text-slate-800">학원 일정 등록</h2>
+                    </div>
+                    <p class="text-slate-500 text-sm mb-6">오늘 등원하는 학원의 이름과 등원 시각을 적어주세요.</p>
+
+                    <div class="app-card p-5 mb-4">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5">학원 이름</label>
+                                <input type="text" id="academy-name" placeholder="예: 수학학원, 영어학원" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-sm bg-slate-50">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5">등원 시각</label>
+                                <input type="time" id="academy-time" value="17:30" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-sm bg-slate-50">
+                            </div>
+                        </div>
+                        <button onclick="addAcademy()" class="w-full mt-4 py-3 bg-slate-100 hover:bg-blue-50 text-blue-600 font-bold rounded-xl text-sm transition flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-plus"></i> 학원 추가하기
+                        </button>
+                    </div>
+
+                    <!-- Added Academies List -->
+                    <div class="mt-4">
+                        <span class="text-xs font-bold text-slate-400 block mb-2 px-1">등록된 학원 목록 (<span id="academy-count">0</span>개)</span>
+                        <div id="academy-list" class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
+                            <!-- JS Dynamically injects items here -->
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="validateAndGoStep(2)" class="w-full py-4 bg-blue-600 text-white font-bold text-base rounded-2xl btn-primary mt-4">
+                    확인 및 다음으로
+                </button>
+            </div>
+
+            <!-- STEP 2: Register Homework -->
+            <div id="step-2" class="step-transition hidden flex-col h-full justify-between py-2">
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl">✍️</span>
+                        <h2 class="text-2xl font-bold text-slate-800">숙제 등록</h2>
+                    </div>
+                    <p class="text-slate-500 text-sm mb-6">학원에 맞춰 해결해야 할 숙제 단원 정보를 입력하세요.</p>
+
+                    <div class="app-card p-5 mb-4">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5">해당 학원 선택</label>
+                                <select id="hw-academy-select" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-sm bg-slate-50">
+                                    <!-- Dynamic options -->
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5">과목 및 단원명 (예: 극대극소, 미적분, 삼각함수)</label>
+                                <input type="text" id="hw-subject" placeholder="예: 극대극소, 미적분, 영문법" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-sm bg-slate-50">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 mb-1.5">총 문제 수</label>
+                                    <input type="number" id="hw-count" value="15" min="1" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-sm bg-slate-50">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 mb-1.5">중요도 / 난이도</label>
+                                    <select id="hw-priority" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-sm bg-slate-50">
+                                        <option value="high">높음 (매우 중요)</option>
+                                        <option value="medium" selected>보통</option>
+                                        <option value="low">낮음</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="addHomework()" class="w-full mt-4 py-3 bg-slate-100 hover:bg-blue-50 text-blue-600 font-bold rounded-xl text-sm transition flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-plus"></i> 숙제 항목 추가
+                        </button>
+                    </div>
+
+                    <!-- Added Homeworks List -->
+                    <div class="mt-4">
+                        <span class="text-xs font-bold text-slate-400 block mb-2 px-1">등록된 숙제 목록 (<span id="hw-count-badge">0</span>개)</span>
+                        <div id="hw-list" class="space-y-2 max-h-40 overflow-y-auto no-scrollbar">
+                            <!-- JS Dynamically injects items here -->
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="validateAndGoStep(3)" class="w-full py-4 bg-blue-600 text-white font-bold text-base rounded-2xl btn-primary mt-4">
+                    스톱워치 측정 시작
+                </button>
+            </div>
+
+            <!-- STEP 3: Dynamic Subjective Quiz & Stopwatch Timer (+30s reading time & +60s penalties) -->
+            <div id="step-3" class="step-transition hidden flex-col h-full justify-between py-2">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl">⏱️</span>
+                            <h2 class="text-2xl font-bold text-slate-800">1문제 속도 측정</h2>
+                        </div>
+                        <span id="quiz-progress-badge" class="bg-blue-100 text-blue-700 font-bold text-xs px-2.5 py-1 rounded-full">1 / 1</span>
+                    </div>
+                    <p class="text-slate-500 text-xs mb-3">AI가 생성한 단원 맞춤 문제를 읽고 정답을 직접 맞춰보세요!</p>
+
+                    <!-- Active Homework Unit Badge -->
+                    <div class="bg-blue-50/80 border border-blue-100 p-3 rounded-2xl mb-3 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span id="quiz-target-badge" class="bg-blue-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-md">과목</span>
+                            <span id="quiz-target-subject" class="font-bold text-slate-800 text-sm">극대극소</span>
+                        </div>
+                        <span id="penalty-count-text" class="text-xs text-rose-500 font-bold hidden"><i class="fa-solid fa-circle-exclamation"></i> 오답 패널티 누적</span>
+                    </div>
+
+                    <!-- Stopwatch Display Card -->
+                    <div class="app-card p-4 text-center mb-3 bg-gradient-to-b from-white to-slate-50 relative">
+                        <div class="text-[10px] font-bold text-blue-500 mb-1 tracking-wider uppercase">
+                            <i class="fa-solid fa-book-open mr-1"></i> 문제 읽는 시간 +30초 기본 가산됨
+                        </div>
+                        <div id="timer-display" class="text-4xl font-black text-slate-800 font-mono tracking-wider timer-pulse">00:30</div>
+                    </div>
+
+                    <!-- AI Generated Dynamic Subjective Quiz Card -->
+                    <div class="app-card p-5">
+                        <div class="text-xs font-bold text-blue-600 mb-2 flex items-center gap-1">
+                            <i class="fa-solid fa-brain"></i> AI 실전 주관식 문제
+                        </div>
+                        <p id="quiz-question-text" class="text-slate-800 font-bold text-sm md:text-base mb-4 leading-relaxed min-h-[48px] bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            단원에 맞춰 문제를 생성 중입니다...
+                        </p>
+
+                        <!-- Answer Input & Submit -->
+                        <div class="space-y-3">
+                            <input type="text" id="quiz-answer-input" placeholder="정답 입력 (숫자 또는 영문/한글 단어)" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-sm bg-slate-50 text-center font-bold">
+                            
+                            <!-- Submit Button -->
+                            <button onclick="submitQuizAnswer()" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition shadow-md flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-check"></i> 정답 채점 및 측정 완료
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Wrong Answer Alert Banner -->
+                    <div id="quiz-alert-box" class="hidden mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-600 text-xs rounded-xl font-bold flex items-center justify-center gap-1.5 animate-bounce">
+                        <i class="fa-solid fa-triangle-exclamation"></i> ❌ 오답입니다! 정답을 맞힐 때까지 스톱워치가 지속되며 +1분(60초) 패널티가 추가됩니다.
+                    </div>
+                </div>
+
+                <div class="text-center text-xs text-slate-400 mt-2">
+                    * 답을 맞힐 때까지 스톱워치가 멈추지 않습니다.
+                </div>
+            </div>
+
+            <!-- STEP 4: Study Style & Focus Level -->
+            <div id="step-4" class="step-transition hidden flex-col h-full justify-between py-2">
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl">⚡</span>
+                        <h2 class="text-2xl font-bold text-slate-800">공부 스타일 설정</h2>
+                    </div>
+                    <p class="text-slate-500 text-sm mb-6">오늘의 집중 상태와 선호하는 작업 방식을 선택해주세요.</p>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-2">오늘의 집중 상태</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button type="button" onclick="selectStyleOption('focus', 'high', this)" class="option-card selected p-4 rounded-2xl flex flex-col items-center gap-2 text-center">
+                                    <span class="text-2xl">🔥</span>
+                                    <span class="font-bold text-sm">최상 (몰입 모드)</span>
+                                    <span class="text-[11px] opacity-75">어려운 숙제 먼저</span>
+                                </button>
+                                <button type="button" onclick="selectStyleOption('focus', 'low', this)" class="option-card p-4 rounded-2xl flex flex-col items-center gap-2 text-center">
+                                    <span class="text-2xl">😴</span>
+                                    <span class="font-bold text-sm">피곤함 (워밍업)</span>
+                                    <span class="text-[11px] opacity-75">쉬운 숙제 먼저</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-2">숙제 처리 스타일</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button type="button" onclick="selectStyleOption('order', 'deadline', this)" class="option-card selected p-4 rounded-2xl flex flex-col items-center gap-2 text-center">
+                                    <span class="text-2xl">⏰</span>
+                                    <span class="font-bold text-sm">마감 임박순</span>
+                                    <span class="text-[11px] opacity-75">등원 빠를수록 우선</span>
+                                </button>
+                                <button type="button" onclick="selectStyleOption('order', 'fast', this)" class="option-card p-4 rounded-2xl flex flex-col items-center gap-2 text-center">
+                                    <span class="text-2xl">⚡</span>
+                                    <span class="font-bold text-sm">빠른 해치우기</span>
+                                    <span class="text-[11px] opacity-75">소요시간 짧은순</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="startAiAnalysis()" class="w-full py-4 bg-blue-600 text-white font-bold text-base rounded-2xl btn-primary mt-4">
+                    AI 분석 및 순서 생성
+                </button>
+            </div>
+
+            <!-- STEP 5: Loading / AI Analysis -->
+            <div id="step-5" class="step-transition hidden flex-col items-center justify-center h-full text-center py-10">
+                <div class="relative mb-6">
+                    <div class="w-24 h-24 bg-blue-100 rounded-3xl flex items-center justify-center animate-bounce">
+                        <i class="fa-solid fa-robot text-5xl text-blue-600"></i>
+                    </div>
+                    <div class="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full animate-ping"></div>
+                </div>
+
+                <h3 class="text-2xl font-bold text-slate-800 mb-2">AI가 최적 순서 계산 중...</h3>
+                <p class="text-slate-400 text-sm max-w-xs leading-relaxed mb-6">
+                    학원 등원 시간, 1문제 실측 속도(+30초 읽기시간 및 패널티)를 분석해 완벽한 스케줄을 짜고 있습니다.
+                </p>
+
+                <!-- Loading Bar -->
+                <div class="w-48 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                    <div class="bg-blue-600 h-full w-full animate-pulse"></div>
+                </div>
+            </div>
+
+            <!-- STEP 6: Final Priority Timeline Report -->
+            <div id="step-6" class="step-transition hidden flex-col h-full justify-between py-2">
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl">🎯</span>
+                            <h2 class="text-2xl font-bold text-slate-800">오늘의 숙제 순서</h2>
+                        </div>
+                        <span class="text-xs bg-blue-100 text-blue-700 font-bold px-2.5 py-1 rounded-full">AI 추천 완료</span>
+                    </div>
+                    <p class="text-slate-500 text-xs mb-4">가장 효율적인 맞춤형 숙제 수행 타임라인입니다.</p>
+
+                    <!-- Priority Task List -->
+                    <div id="result-task-list" class="space-y-3 mb-6 max-h-[420px] overflow-y-auto no-scrollbar">
+                        <!-- JS Dynamically injects prioritized cards -->
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <button onclick="resetApp()" class="w-full py-4 bg-blue-600 text-white font-bold text-base rounded-2xl btn-primary">
+                        처음부터 다시하기
+                    </button>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        // --- STATE MANAGEMENT ---
+        let currentStep = 0;
+        let academies = [
+            { id: 1, name: '수학학원', time: '17:30' },
+            { id: 2, name: '영어학원', time: '19:00' }
+        ];
+        let homeworks = [
+            { id: 1, academyId: 1, academyName: '수학학원', subject: '극대극소', count: 12, priority: 'high', measuredTimeSec: 0 },
+            { id: 2, academyId: 2, academyName: '영어학원', subject: '영문법 독해', count: 10, priority: 'medium', measuredTimeSec: 0 }
+        ];
+
+        let quizIndex = 0;
+        let timerInterval = null;
+        let timerSeconds = 30; // Starts with +30s Reading Time!
+        let currentPenaltySec = 0;
+        let currentQuizData = null;
+
+        let styleSettings = {
+            focus: 'high',
+            order: 'deadline'
+        };
+
+        // Advanced Subjective Quiz Database by Keyword (Answers are NEVER revealed in problem text)
+        const dynamicQuizPool = [
+            {
+                keywords: ['극대극소', '극대', '극소', '도함수'],
+                question: "함수 f(x) = x³ - 3x² + 1 의 극댓값을 M, 극솟값을 m 이라 할 때, M - m 의 값을 구하시오.",
+                answer: "4"
+            },
+            {
+                keywords: ['미적분', '수열', '극한', '미분계수'],
+                question: "함수 f(x) = x² + 3x 일 때, x = 2 에서의 미분계수 f'(2)의 값을 구하시오.",
+                answer: "7"
+            },
+            {
+                keywords: ['삼각함수', '사인', '코사인', '탄젠트'],
+                question: "sin(30°) + cos(60°) 의 계산 결과를 구하시오.",
+                answer: "1"
+            },
+            {
+                keywords: ['이차방정식', '방정식', '근과계수'],
+                question: "이차방정식 x² - 5x + 6 = 0 의 두 근의 합을 구하시오.",
+                answer: "5"
+            },
+            {
+                keywords: ['수학', '연산'],
+                question: "다항식 (x + 2)(x + 3) 을 전개했을 때, x의 계수를 구하시오.",
+                answer: "5"
+            },
+            {
+                keywords: ['영어', '영문법', '독해', '단어'],
+                question: "'important'의 명사형 단어(중요성)를 영문 소문자로 입력하시오.",
+                answer: "importance"
+            },
+            {
+                keywords: ['국어', '문학', '비문학'],
+                question: "시에서 사물을 사람처럼 비유하여 표현하는 수사법의 명칭을 입력하시오.",
+                answer: "의인법"
+            },
+            {
+                keywords: ['과학', '물리', '화학'],
+                question: "물의 화학식을 입력하시오. (대소문자 구분 없음)",
+                answer: "h2o"
+            }
+        ];
+
+        // --- DOM LOAD & INITIALIZATION ---
+        window.addEventListener('DOMContentLoaded', () => {
+            renderAcademies();
+            renderHomeworks();
+        });
+
+        // --- STEP NAVIGATION CONTROLLER ---
+        function setStep(stepNum) {
+            currentStep = stepNum;
+            const header = document.getElementById('app-header');
+            const progressBar = document.getElementById('progress-bar');
+            
+            // Toggle Header Visibility
+            if (stepNum === 0 || stepNum === 5) {
+                header.classList.add('hidden');
+            } else {
+                header.classList.remove('hidden');
+                document.getElementById('current-step-num').innerText = stepNum;
+                // Progress Bar Math
+                const percentage = Math.min(100, Math.max(20, (stepNum / 5) * 100));
+                progressBar.style.width = percentage + '%';
+            }
+
+            // Hide all steps
+            for (let i = 0; i <= 6; i++) {
+                const el = document.getElementById(`step-${i}`);
+                if (el) {
+                    el.classList.add('hidden');
+                    el.classList.remove('flex');
+                }
+            }
+
+            // Show active step
+            const activeEl = document.getElementById(`step-${stepNum}`);
+            if (activeEl) {
+                activeEl.classList.remove('hidden');
+                activeEl.classList.add('flex');
+            }
+
+            // Step Specific Hooks
+            if (stepNum === 2) updateHomeworkAcademySelect();
+            if (stepNum === 3) startQuizStep();
+        }
+
+        function nextStep() {
+            if (currentStep < 6) setStep(currentStep + 1);
+        }
+
+        function prevStep() {
+            if (currentStep > 1) {
+                if (currentStep === 3) stopTimer();
+                setStep(currentStep - 1);
+            } else if (currentStep === 1) {
+                setStep(0);
+            }
+        }
+
+        function resetApp() {
+            stopTimer();
+            quizIndex = 0;
+            setStep(0);
+        }
+
+        function validateAndGoStep(targetStep) {
+            if (targetStep === 2 && academies.length === 0) {
+                alert('최소 하나 이상의 학원을 등록해주세요!');
+                return;
+            }
+            if (targetStep === 3 && homeworks.length === 0) {
+                alert('최소 하나 이상의 숙제를 등록해주세요!');
+                return;
+            }
+            setStep(targetStep);
+        }
+
+        // --- STEP 1: ACADEMY LOGIC ---
+        function addAcademy() {
+            const nameInput = document.getElementById('academy-name');
+            const timeInput = document.getElementById('academy-time');
+            
+            if (!nameInput.value.trim()) {
+                alert('학원 이름을 입력해주세요.');
+                return;
+            }
+
+            academies.push({
+                id: Date.now(),
+                name: nameInput.value.trim(),
+                time: timeInput.value || '18:00'
+            });
+
+            nameInput.value = '';
+            renderAcademies();
+        }
+
+        function removeAcademy(id) {
+            academies = academies.filter(a => a.id !== id);
+            homeworks = homeworks.filter(h => h.academyId !== id);
+            renderAcademies();
+            renderHomeworks();
+        }
+
+        function renderAcademies() {
+            const listEl = document.getElementById('academy-list');
+            document.getElementById('academy-count').innerText = academies.length;
+
+            if (academies.length === 0) {
+                listEl.innerHTML = `<div class="text-center py-4 text-xs text-slate-400">등록된 학원이 없습니다.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = academies.map(a => `
+                <div class="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
+                            <i class="fa-solid fa-school"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold text-sm text-slate-800">${a.name}</div>
+                            <div class="text-xs text-slate-400">등원 시각: ${a.time}</div>
+                        </div>
+                    </div>
+                    <button onclick="removeAcademy(${a.id})" class="text-slate-300 hover:text-rose-500 p-1.5 transition">
+                        <i class="fa-solid fa-trash-can text-sm"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // --- STEP 2: HOMEWORK LOGIC ---
+        function updateHomeworkAcademySelect() {
+            const selectEl = document.getElementById('hw-academy-select');
+            selectEl.innerHTML = academies.map(a => `<option value="${a.id}">${a.name} (${a.time})</option>`).join('');
+        }
+
+        function addHomework() {
+            const academySelect = document.getElementById('hw-academy-select');
+            const subjectInput = document.getElementById('hw-subject');
+            const countInput = document.getElementById('hw-count');
+            const prioritySelect = document.getElementById('hw-priority');
+
+            if (!subjectInput.value.trim()) {
+                alert('과목 및 단원명을 입력해주세요.');
+                return;
+            }
+
+            const academyId = parseInt(academySelect.value);
+            const academyObj = academies.find(a => a.id === academyId);
+
+            homeworks.push({
+                id: Date.now(),
+                academyId: academyId,
+                academyName: academyObj ? academyObj.name : '학원',
+                subject: subjectInput.value.trim(),
+                count: parseInt(countInput.value) || 10,
+                priority: prioritySelect.value,
+                measuredTimeSec: 0
+            });
+
+            subjectInput.value = '';
+            renderHomeworks();
+        }
+
+        function removeHomework(id) {
+            homeworks = homeworks.filter(h => h.id !== id);
+            renderHomeworks();
+        }
+
+        function renderHomeworks() {
+            const listEl = document.getElementById('hw-list');
+            document.getElementById('hw-count-badge').innerText = homeworks.length;
+
+            if (homeworks.length === 0) {
+                listEl.innerHTML = `<div class="text-center py-4 text-xs text-slate-400">등록된 숙제가 없습니다.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = homeworks.map(h => `
+                <div class="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold text-sm text-slate-800">${h.subject}</div>
+                            <div class="text-xs text-slate-400">${h.academyName} • ${h.count}문제</div>
+                        </div>
+                    </div>
+                    <button onclick="removeHomework(${h.id})" class="text-slate-300 hover:text-rose-500 p-1.5 transition">
+                        <i class="fa-solid fa-trash-can text-sm"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // --- STEP 3: DYNAMIC QUIZ & STOPWATCH LOGIC (+30s Base & +60s Penalties) ---
+        function startQuizStep() {
+            if (quizIndex >= homeworks.length) {
+                setStep(4);
+                return;
+            }
+
+            const currentHw = homeworks[quizIndex];
+            
+            document.getElementById('quiz-progress-badge').innerText = `${quizIndex + 1} / ${homeworks.length}`;
+            document.getElementById('quiz-target-subject').innerText = currentHw.subject;
+            document.getElementById('quiz-target-badge').innerText = currentHw.academyName;
+            document.getElementById('quiz-answer-input').value = '';
+            document.getElementById('quiz-alert-box').classList.add('hidden');
+            document.getElementById('penalty-count-text').classList.add('hidden');
+
+            // Find matching dynamic quiz by user's entered subject keyword
+            const foundQuiz = dynamicQuizPool.find(q => 
+                q.keywords.some(k => currentHw.subject.toLowerCase().includes(k.toLowerCase()))
+            ) || {
+                question: `'${currentHw.subject}' 대표 주관식 문제: 다항식 x² + 4x + 4 = 0 의 해(x)의 값을 구하시오.`,
+                answer: "-2"
+            };
+
+            currentQuizData = foundQuiz;
+            document.getElementById('quiz-question-text').innerText = foundQuiz.question;
+
+            // Reset Timer & Start WITH +30 Seconds Reading Time Base!
+            stopTimer();
+            timerSeconds = 30; // 30 Seconds Reading Time added by default
+            currentPenaltySec = 0;
+            updateTimerDisplay();
+            
+            timerInterval = setInterval(() => {
+                timerSeconds++;
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(timerSeconds / 60);
+            const secs = timerSeconds % 60;
+            document.getElementById('timer-display').innerText = 
+                `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function submitQuizAnswer() {
+            const userInput = document.getElementById('quiz-answer-input').value.trim().toLowerCase();
+            const expectedAnswer = currentQuizData.answer.toLowerCase();
+
+            if (!userInput) {
+                alert('정답을 입력해주세요!');
+                return;
+            }
+
+            if (userInput === expectedAnswer) {
+                // Correct Answer! Stop timer & store time
+                stopTimer();
+                homeworks[quizIndex].measuredTimeSec = timerSeconds;
+
+                quizIndex++;
+                if (quizIndex < homeworks.length) {
+                    startQuizStep(); // Next Quiz
+                } else {
+                    setStep(4); // Move to Study Style
+                }
+            } else {
+                // Wrong Answer! Apply +60s (1 Minute) Penalty
+                timerSeconds += 60;
+                currentPenaltySec += 60;
+                updateTimerDisplay();
+
+                document.getElementById('quiz-alert-box').classList.remove('hidden');
+                document.getElementById('penalty-count-text').classList.remove('hidden');
+                document.getElementById('quiz-answer-input').value = '';
+                document.getElementById('quiz-answer-input').focus();
+            }
+        }
+
+        // --- STEP 4: STUDY STYLE LOGIC ---
+        function selectStyleOption(category, value, el) {
+            styleSettings[category] = value;
+            const parent = el.parentElement;
+            const cards = parent.querySelectorAll('.option-card');
+            cards.forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+        }
+
+        // --- STEP 5 & 6: AI TIMELINE ALGORITHM & REPORT ---
+        function startAiAnalysis() {
+            setStep(5); // Loading screen
+
+            setTimeout(() => {
+                calculateAndRenderResults();
+                setStep(6); // Final Report Screen
+            }, 1800);
+        }
+
+        function calculateAndRenderResults() {
+            let calculatedTasks = homeworks.map(hw => {
+                const academyObj = academies.find(a => a.id === hw.academyId) || { time: '20:00' };
+                
+                // Total Estimated Minutes = (Measured Time per question including reading & penalties) * Total Problem Count
+                const secPerProb = hw.measuredTimeSec > 0 ? hw.measuredTimeSec : 60;
+                const totalSec = secPerProb * hw.count;
+                const totalMins = Math.max(1, Math.round(totalSec / 60));
+
+                const [hrs, mins] = academyObj.time.split(':').map(Number);
+                const timeInMins = hrs * 60 + mins;
+
+                let pScore = 0;
+                if (hw.priority === 'high') pScore += 100;
+                if (hw.priority === 'medium') pScore += 50;
+
+                pScore += (24 * 60 - timeInMins);
+
+                if (styleSettings.focus === 'high' && hw.priority === 'high') pScore += 80;
+                if (styleSettings.focus === 'low' && hw.priority === 'low') pScore += 80;
+                if (styleSettings.order === 'fast') pScore += (500 - totalMins);
+
+                return {
+                    ...hw,
+                    academyTime: academyObj.time,
+                    totalMins: totalMins,
+                    secPerProb: secPerProb,
+                    score: pScore
+                };
+            });
+
+            calculatedTasks.sort((a, b) => b.score - a.score);
+
+            const resultListEl = document.getElementById('result-task-list');
+            
+            resultListEl.innerHTML = calculatedTasks.map((task, index) => {
+                const isFirst = index === 0;
+                return `
+                    <div class="app-card p-4 relative overflow-hidden border-l-4 ${isFirst ? 'border-l-blue-600 bg-blue-50/30' : 'border-l-slate-300'}">
+                        ${isFirst ? '<span class="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-bl-xl">BEST FIRST</span>' : ''}
+                        
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-full ${isFirst ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'} font-black text-xs flex items-center justify-center">
+                                    ${index + 1}
+                                </span>
+                                <span class="font-extrabold text-slate-800 text-base">${task.subject}</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100 text-xs">
+                            <div class="text-slate-500">
+                                <i class="fa-solid fa-school text-blue-500 mr-1"></i> ${task.academyName} <span class="text-slate-400">(${task.academyTime})</span>
+                            </div>
+                            <div class="text-right font-bold text-blue-600">
+                                <i class="fa-solid fa-clock mr-1"></i> 예상 ${task.totalMins}분 소요
+                            </div>
+                        </div>
+
+                        <div class="mt-2 text-[11px] text-slate-400 flex items-center justify-between">
+                            <span>1문제 평균(읽기+패널티 포함): ${task.secPerProb}초</span>
+                            <span>총 ${task.count}개 문제</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    </script>
+</body>
+</html>
